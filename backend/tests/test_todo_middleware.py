@@ -17,6 +17,7 @@ from deerflow.agents.middlewares.todo_middleware import (
     _reminder_in_messages,
     _todos_in_messages,
 )
+from deerflow.agents.thread_state import ThreadState
 
 
 def _ai_with_write_todos():
@@ -510,6 +511,18 @@ class TestWrapModelCall:
 
 
 class TestTodoMiddlewareAgentGraphIntegration:
+    def test_builds_with_deerflow_thread_state(self):
+        mw = TodoMiddleware()
+        model = _CapturingFakeMessagesListChatModel(responses=[AIMessage(content="ok")])
+
+        graph = create_agent(model=model, tools=[], middleware=[mw], state_schema=ThreadState)
+        result = graph.invoke(
+            {"messages": [("user", "hello")]},
+            context={"thread_id": "thread-state-thread", "run_id": "thread-state-run"},
+        )
+
+        assert result["messages"][-1].content == "ok"
+
     def test_completion_reminder_is_transient_in_real_agent_graph(self):
         mw = TodoMiddleware()
         model = _CapturingFakeMessagesListChatModel(
