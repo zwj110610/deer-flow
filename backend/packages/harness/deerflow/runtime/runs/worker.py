@@ -33,6 +33,7 @@ from deerflow.config.app_config import AppConfig
 from deerflow.runtime.serialization import serialize
 from deerflow.runtime.stream_bridge import StreamBridge
 from deerflow.runtime.user_context import get_effective_user_id
+from deerflow.sandbox.prewarm import cleanup_sandbox_prewarm, start_sandbox_prewarm_if_needed
 from deerflow.tracing import inject_langfuse_metadata
 
 from .manager import RunManager, RunRecord
@@ -153,6 +154,7 @@ async def run_agent(
     llm_error_fallback_message: str | None = None
 
     journal = None
+    runtime_ctx: dict[str, Any] | None = None
 
     # Track whether "events" was requested but skipped
     if "events" in requested_modes:
@@ -225,6 +227,7 @@ async def run_agent(
         # runtime-internal channel; user code must not depend on the key name.
         if journal is not None:
             runtime_ctx["__run_journal"] = journal
+        start_sandbox_prewarm_if_needed(runtime_ctx, graph_input, ctx.app_config)
         _install_runtime_context(config, runtime_ctx)
         runtime = Runtime(context=cast(Any, runtime_ctx), store=store)
         config.setdefault("configurable", {})["__pregel_runtime"] = runtime
@@ -432,6 +435,11 @@ async def run_agent(
                 await thread_store.update_status(thread_id, final_status)
             except Exception:
                 logger.debug("Failed to update thread_meta status for %s (non-fatal)", thread_id)
+
+        try:
+            await cleanup_sandbox_prewarm(runtime_ctx)
+        except Exception:
+            logger.debug("Failed to clean up sandbox prewarm for run %s (non-fatal)", run_id, exc_info=True)
 
         await bridge.publish_end(run_id)
         asyncio.create_task(bridge.cleanup(run_id, delay=60))

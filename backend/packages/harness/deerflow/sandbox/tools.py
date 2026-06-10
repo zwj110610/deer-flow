@@ -16,6 +16,7 @@ from deerflow.sandbox.exceptions import (
     SandboxRuntimeError,
 )
 from deerflow.sandbox.file_operation_lock import get_file_operation_lock
+from deerflow.sandbox.prewarm import consume_prewarmed_sandbox_id, consume_prewarmed_sandbox_id_async
 from deerflow.sandbox.sandbox import Sandbox
 from deerflow.sandbox.sandbox_provider import get_sandbox_provider
 from deerflow.sandbox.search import GrepMatch
@@ -1135,7 +1136,11 @@ def ensure_sandbox_initialized(runtime: Runtime | None = None) -> Sandbox:
         raise SandboxRuntimeError("Thread ID not available in runtime context")
 
     provider = get_sandbox_provider()
-    sandbox_id = provider.acquire(thread_id)
+    sandbox_id = consume_prewarmed_sandbox_id(runtime.context if runtime.context is not None else None)
+    if sandbox_id is None:
+        sandbox_id = provider.acquire(thread_id)
+    elif runtime.context is not None:
+        runtime.context["sandbox_id"] = sandbox_id
 
     # Update runtime state - this persists across tool calls
     runtime.state["sandbox"] = {"sandbox_id": sandbox_id}
@@ -1180,7 +1185,11 @@ async def ensure_sandbox_initialized_async(runtime: Runtime | None = None) -> Sa
         raise SandboxRuntimeError("Thread ID not available in runtime context")
 
     provider = get_sandbox_provider()
-    sandbox_id = await provider.acquire_async(thread_id)
+    sandbox_id = await consume_prewarmed_sandbox_id_async(runtime.context if runtime.context is not None else None)
+    if sandbox_id is None:
+        sandbox_id = await provider.acquire_async(thread_id)
+    elif runtime.context is not None:
+        runtime.context["sandbox_id"] = sandbox_id
 
     runtime.state["sandbox"] = {"sandbox_id": sandbox_id}
 

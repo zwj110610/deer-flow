@@ -15,7 +15,7 @@
 # ============================================================================
 # Bump this number when the config schema changes.
 # Run `make config-upgrade` to merge new fields into your local config.yaml.
-config_version: 11
+config_version: 12
 
 # ============================================================================
 # Logging
@@ -719,6 +719,18 @@ sandbox:
 #
 #   # Optional: Base port for sandbox containers (default: 8080)
 #   # port: 8080
+#
+#   # Optional: Predictively prewarm AIO sandbox containers when structured
+#   # input signals point at sandbox work (file paths, command literals,
+#   # stack traces, code blocks, uploaded files). This overlaps container cold
+#   # start with the model's first turn while preserving lazy acquisition for
+#   # ordinary chat. Disabled by default.
+#   # prewarm:
+#   #   enabled: false
+#   #   mode: predictive       # predictive | always
+#   #   max_concurrent: 2
+#   #   destroy_unused: true   # destroy false-positive prewarms at run end
+#   #   trigger_keywords: []   # optional deployment-specific keywords
 
 #   # Optional: Maximum number of concurrent sandbox containers (default: 3)
 #   # When the limit is reached the least-recently-used sandbox is evicted to

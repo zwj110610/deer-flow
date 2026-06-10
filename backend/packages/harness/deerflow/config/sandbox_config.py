@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -7,6 +9,37 @@ class VolumeMountConfig(BaseModel):
     host_path: str = Field(..., description="Path on the host machine")
     container_path: str = Field(..., description="Path inside the container")
     read_only: bool = Field(default=False, description="Whether the mount is read-only")
+
+
+class SandboxPrewarmConfig(BaseModel):
+    """Predictive sandbox prewarm settings.
+
+    Prewarming keeps the default lazy-init semantics but allows runs that look
+    likely to use sandbox tools to start acquiring the sandbox in parallel with
+    the model's first turn.
+    """
+
+    enabled: bool = Field(
+        default=False,
+        description="Start AIO sandbox acquisition in the background when structured input signals suggest sandbox tools may be used.",
+    )
+    mode: Literal["predictive", "always"] = Field(
+        default="predictive",
+        description="'predictive' uses language-agnostic structured signals; 'always' prewarms every run. Only applies to AioSandboxProvider.",
+    )
+    max_concurrent: int = Field(
+        default=2,
+        ge=1,
+        description="Maximum number of concurrent background sandbox prewarm acquisitions per event loop.",
+    )
+    destroy_unused: bool = Field(
+        default=True,
+        description="Destroy a prewarmed sandbox at run end when no sandbox tool consumed it. Disable to leave it in the provider warm pool.",
+    )
+    trigger_keywords: list[str] = Field(
+        default_factory=list,
+        description="Optional deployment-specific case-insensitive keywords that should trigger predictive prewarm.",
+    )
 
 
 class SandboxConfig(BaseModel):
@@ -62,6 +95,10 @@ class SandboxConfig(BaseModel):
     environment: dict[str, str] = Field(
         default_factory=dict,
         description="Environment variables to inject into the sandbox container. Values starting with $ will be resolved from host environment variables.",
+    )
+    prewarm: SandboxPrewarmConfig = Field(
+        default_factory=SandboxPrewarmConfig,
+        description="Predictive AIO sandbox prewarm configuration.",
     )
 
     bash_output_max_chars: int = Field(
