@@ -36,6 +36,7 @@ import {
 } from "@/core/api/feedback";
 import { resolveArtifactURL } from "@/core/artifacts/utils";
 import { useI18n } from "@/core/i18n/hooks";
+import { shouldRenderHumanMessageAsPlainText } from "@/core/messages/human-message-rendering";
 import {
   extractContentFromMessage,
   extractReasoningContentFromMessage,
@@ -300,21 +301,36 @@ function MessageContent_({
   }
 
   if (isHuman) {
+    const renderAsPlainText =
+      shouldRenderHumanMessageAsPlainText(contentToDisplay);
     const messageResponse = contentToDisplay ? (
-      <AIElementMessageResponse
-        remarkPlugins={humanMessagePlugins.remarkPlugins}
-        rehypePlugins={humanMessagePlugins.rehypePlugins}
-        components={components}
-        parseIncompleteMarkdown={false}
-      >
-        {contentToDisplay}
-      </AIElementMessageResponse>
+      renderAsPlainText ? (
+        <pre
+          className="max-w-full overflow-x-auto text-left font-mono text-xs leading-relaxed whitespace-pre"
+          data-testid="human-plain-code"
+        >
+          <code className="block min-w-max whitespace-pre">
+            {contentToDisplay}
+          </code>
+        </pre>
+      ) : (
+        <AIElementMessageResponse
+          remarkPlugins={humanMessagePlugins.remarkPlugins}
+          rehypePlugins={humanMessagePlugins.rehypePlugins}
+          components={components}
+          parseIncompleteMarkdown={false}
+        >
+          {contentToDisplay}
+        </AIElementMessageResponse>
+      )
     ) : null;
     return (
       <div className={cn("ml-auto flex flex-col gap-2", className)}>
         {filesList}
         {messageResponse && (
-          <AIElementMessageContent className="w-fit">
+          <AIElementMessageContent
+            className={cn(renderAsPlainText ? "w-full max-w-full" : "w-fit")}
+          >
             {messageResponse}
           </AIElementMessageContent>
         )}
