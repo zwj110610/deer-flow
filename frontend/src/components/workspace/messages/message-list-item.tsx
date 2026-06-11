@@ -19,7 +19,6 @@ import { Loader } from "@/components/ai-elements/loader";
 import {
   Message as AIElementMessage,
   MessageContent as AIElementMessageContent,
-  MessageResponse as AIElementMessageResponse,
   MessageToolbar,
 } from "@/components/ai-elements/message";
 import {
@@ -44,7 +43,6 @@ import {
   type FileInMessage,
 } from "@/core/messages/utils";
 import { useRehypeSplitWordsIntoSpans } from "@/core/rehype";
-import { humanMessagePlugins } from "@/core/streamdown";
 import { cn } from "@/lib/utils";
 
 import { CopyButton } from "../copy-button";
@@ -301,20 +299,18 @@ function MessageContent_({
 
   if (isHuman) {
     const messageResponse = contentToDisplay ? (
-      <AIElementMessageResponse
-        remarkPlugins={humanMessagePlugins.remarkPlugins}
-        rehypePlugins={humanMessagePlugins.rehypePlugins}
-        components={components}
-        parseIncompleteMarkdown={false}
+      <div
+        className="text-left break-words whitespace-pre-wrap [tab-size:4]"
+        data-testid="human-plain-text"
       >
         {contentToDisplay}
-      </AIElementMessageResponse>
+      </div>
     ) : null;
     return (
       <div className={cn("ml-auto flex flex-col gap-2", className)}>
         {filesList}
         {messageResponse && (
-          <AIElementMessageContent className="w-fit">
+          <AIElementMessageContent className="w-fit max-w-full">
             {messageResponse}
           </AIElementMessageContent>
         )}
