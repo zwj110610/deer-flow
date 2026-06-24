@@ -219,6 +219,72 @@ class TestEngineLifecycle:
         assert get_session_factory() is None
 
     @pytest.mark.anyio
+    async def test_sqlite_backfills_legacy_runs_columns_for_token_usage_query(self, tmp_path):
+        from sqlalchemy import text
+        from sqlalchemy.ext.asyncio import create_async_engine
+
+        from deerflow.persistence.engine import close_engine, get_session_factory, init_engine
+        from deerflow.persistence.run import RunRepository
+
+        db_path = tmp_path / "test.db"
+        url = f"sqlite+aiosqlite:///{db_path}"
+        legacy_engine = create_async_engine(url)
+        async with legacy_engine.begin() as conn:
+            await conn.execute(
+                text(
+                    "CREATE TABLE runs ("
+                    "run_id VARCHAR(64) PRIMARY KEY, "
+                    "thread_id VARCHAR(64), "
+                    "assistant_id VARCHAR(128), "
+                    "user_id VARCHAR(64), "
+                    "status VARCHAR(20), "
+                    "model_name VARCHAR(128), "
+                    "multitask_strategy VARCHAR(20), "
+                    "metadata_json JSON, "
+                    "kwargs_json JSON, "
+                    "error TEXT, "
+                    "message_count INTEGER DEFAULT 0, "
+                    "first_human_message TEXT, "
+                    "last_ai_message TEXT, "
+                    "total_input_tokens INTEGER DEFAULT 0, "
+                    "total_output_tokens INTEGER DEFAULT 0, "
+                    "total_tokens INTEGER DEFAULT 0, "
+                    "llm_call_count INTEGER DEFAULT 0, "
+                    "lead_agent_tokens INTEGER DEFAULT 0, "
+                    "subagent_tokens INTEGER DEFAULT 0, "
+                    "middleware_tokens INTEGER DEFAULT 0, "
+                    "created_at DATETIME, "
+                    "updated_at DATETIME"
+                    ")"
+                )
+            )
+            await conn.execute(text("INSERT INTO runs (run_id, thread_id, status, model_name, total_input_tokens, total_output_tokens, total_tokens, lead_agent_tokens) VALUES ('r1', 't1', 'success', 'legacy-model', 4, 6, 10, 10)"))
+        await legacy_engine.dispose()
+
+        await init_engine("sqlite", url=url, sqlite_dir=str(tmp_path))
+        sf = get_session_factory()
+        assert sf is not None
+
+        repo = RunRepository(sf)
+        aggregate = await repo.aggregate_tokens_by_thread("t1")
+        assert aggregate["total_runs"] == 1
+        assert aggregate["total_tokens"] == 10
+        assert aggregate["by_model"] == {"legacy-model": {"tokens": 10, "runs": 1}}
+
+        async with sf() as session:
+            rows = await session.execute(text("PRAGMA table_info(runs)"))
+            columns = {row[1] for row in rows}
+            assert "token_usage_by_model" in columns
+            assert "lead_agent_tokens" in columns
+
+            result = await session.execute(text("SELECT token_usage_by_model, lead_agent_tokens FROM runs WHERE run_id = 'r1'"))
+            row = result.one()
+            assert row.token_usage_by_model == "{}"
+            assert row.lead_agent_tokens == 10
+
+        await close_engine()
+
+    @pytest.mark.anyio
     async def test_postgres_without_asyncpg_gives_actionable_error(self):
         """If asyncpg is not installed, error message tells user what to do."""
         from deerflow.persistence.engine import init_engine

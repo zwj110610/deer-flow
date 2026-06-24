@@ -14,6 +14,7 @@ import asyncio
 import json
 import logging
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
 
@@ -26,6 +27,29 @@ logger = logging.getLogger(__name__)
 
 _engine: AsyncEngine | None = None
 _session_factory: async_sessionmaker[AsyncSession] | None = None
+
+
+async def _ensure_sqlite_run_schema(engine: AsyncEngine) -> None:
+    """Add columns that ``create_all`` cannot backfill on existing SQLite DBs."""
+    run_columns = {
+        "total_input_tokens": "INTEGER DEFAULT 0",
+        "total_output_tokens": "INTEGER DEFAULT 0",
+        "total_tokens": "INTEGER DEFAULT 0",
+        "llm_call_count": "INTEGER DEFAULT 0",
+        "lead_agent_tokens": "INTEGER DEFAULT 0",
+        "subagent_tokens": "INTEGER DEFAULT 0",
+        "middleware_tokens": "INTEGER DEFAULT 0",
+        "token_usage_by_model": "JSON DEFAULT '{}'",
+        "follow_up_to_run_id": "VARCHAR(64)",
+    }
+
+    async with engine.begin() as conn:
+        rows = await conn.execute(text("PRAGMA table_info(runs)"))
+        existing = {row[1] for row in rows}
+        for column_name, column_sql in run_columns.items():
+            if column_name not in existing:
+                await conn.execute(text(f"ALTER TABLE runs ADD COLUMN {column_name} {column_sql}"))
+                logger.info("Added missing SQLite runs.%s column", column_name)
 
 
 async def _auto_create_postgres_db(url: str) -> None:
@@ -154,6 +178,8 @@ async def init_engine(
     try:
         async with _engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+        if backend == "sqlite":
+            await _ensure_sqlite_run_schema(_engine)
     except Exception as exc:
         if backend == "postgres" and "does not exist" in str(exc):
             # Database not yet created — attempt to auto-create it, then retry.
